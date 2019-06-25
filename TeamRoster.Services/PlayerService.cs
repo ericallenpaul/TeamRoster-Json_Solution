@@ -77,8 +77,10 @@ namespace TeamRoster.Services
             return returnValue;
         }
 
-        public Player Add(Player player, List<Player> players)
+        public Player Add(Player player)
         {
+            List<Player> players = GetAll();
+
             //get the next player id
             int newPlayerId = GetNextId(players);
 

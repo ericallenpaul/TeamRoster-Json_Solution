@@ -12,8 +12,8 @@ namespace TeamRoster.App.Menus
 {
     public class PlayerMenu
     {
-        private static string _dataDir;
-        private static PlayerService _playerService; 
+        
+        private static PlayerService _playerService;
 
         public static List<Player> _playerList { get; set; }
 
@@ -21,8 +21,7 @@ namespace TeamRoster.App.Menus
         public static int DisplayMenu()
         {
             //get the data directory and json file
-            _dataDir = $@"{Program.DataDirectory}Data\";
-            _playerService = new PlayerService(_dataDir);
+            _playerService = new PlayerService(Program.DataDir);
 
             //print the menu to screen
             Console.Clear();
@@ -94,11 +93,12 @@ namespace TeamRoster.App.Menus
             ct.PrintLine();
 
             string[] headers = new[] { "Id", "First", "Last", "Team", "Age"};
-            ct.PrintRow(headers);
-            ct.PrintLine();
 
             if (_playerList.Any())
             {
+                ct.PrintRow(headers);
+                ct.PrintLine();
+
                 foreach (var player in _playerList)
                 {
                     string[] rowData = new[] {player.Player_Id.ToString(), player.FirstName, player.LastName, player.Team, player.Age.ToString() };
@@ -132,7 +132,7 @@ namespace TeamRoster.App.Menus
             player.DateAdded = DateTime.Now;
 
             //call the player service and add the player
-            player = _playerService.Add(player, _playerList);
+            player = _playerService.Add(player);
 
             //give the user feed back--pause for one second on screen
             string message = $"Success: Added a new player ID: {player.Player_Id}";

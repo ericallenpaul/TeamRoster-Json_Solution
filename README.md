@@ -2,15 +2,33 @@
 The solution to our TeamRoster w/ Json Data code challenge will probably not be what you expect.
 Adding validation to the age and preventing it from being zero is as simple as a `while()` loop 
 and an if statement. Finishing the team menu can be as simple as copying and pasting some
-of the existing code and swapping the `player` class for the `team` class.
-Instead of focusing on those specific solutions we'll take a larger view of the project
-and solve those problems by refactoring some of the fundamental architecture of the code.
+of the existing code and swapping the `player` class for the `team` class. 
+> You can see that solution in the [SimpleSolution](https://github.com/ericallenpaul/TeamRoster-Json/tree/SimpleSolution) 
+branch of the challenge
+
+Instead of focusing on those specific problems we'll take a larger view of the project
+and solve those problems by *refactoring* some of the fundamental architecture of the code.
+Refactoring is the process of changing the structure of your code without changing the 
+functionality of the program.
+
+When I refactor I'm looking at things primarily with an eye for future code changes.
+So most of the items I'll be changing are so that any changes to my program in the 
+future will be easier. Questions that I ask myself when I refactor:
+
+- Do I have any duplicated code?
+- Are my method names and variable names consistent?
+- Is there any code that is difficult to understand that can be simplified?
+- Do I have any long methods that could be spilt into multiple methods?
+- How hard would it be to add another class and extend the programs functionality?
+- Are there patterns in my code that allow me to use generics to simplify my code?
+- Do I have any classes that could benefit from inhertience, encapsulation or polymorphism?
+
 We'll begin by pointing out the problems 
 
 > We'll be completely skipping Unit testing and the
 items related to Unit testing just to keep things simple.
 
-### Problem 1 - Repetitive and inflexible messages
+### Problem 1 - Repetitive and inflexible message system
 There are several places in our code where we use code like:
 
 ```
@@ -57,7 +75,105 @@ Now we'll go back and change all of our messages so that they use this one commo
 This will make future changes nuch easier. Now if you get a new requirement like
 "All error messages should be red and logged" it will be much easier to change.
 
-### Problem 1 - "Happy path coding" and Brittle or Fragile code
+> Normally, I wouldn't be handling any message operations and I'd depend on a library 
+> like [Nlog](https://nlog-project.org/)
+> which is a standard way to handle messages in an application. It's always important to
+> consider **Best Practices** and look for standards when writing your application. 
+
+### Problem 2 - Bad SOC (Seperations of concerns)
+The whole point of having seperate projects is keeping functionally simaliar operations 
+together in the same project. For example, my service project doesn't use `Console.Write()` 
+because that's a UI function (Well as much UI you can have in a console app anyway). 
+The UI should be completly isolated from the data. Since we're using flat files as our data,
+it seems logical that the console should control where the data is stored, but beyond configuration
+the PlayerMenu should be free from knowing anything at all about the data files. 
+I noticed that in the `Add()` method of the menu I add a player like this:
+
+```
+//call the player service and add the player
+player = _playerService.Add(player, _playerList);
+```
+
+In this instance the _playerList is really not needed. Once the application 
+passes the configuration to the service project the individual methods become *less aware*
+of what's going on with the data. By having the PlayerMenu assign the data directory I
+created a direct tie-in to the data files. In my opinion this is bad seperation between the UI
+and the data. I should be able to switch the service project over to SQL without ever 
+touching anything but the application configuration.
+
+![Soc](soc.png) 
+>Visualization of the connections 
+ 
+So we'll fix this problem by placing the responsibility for the location of the data
+directory on the app and not the menu. In `Program.cs` is where I'll place the directory 
+information. I'll declare the following as a public variable:
+
+```
+public static string DataDir;
+public static string ProgramDirectory { get; set; } = AppDomain.CurrentDomain.BaseDirectory;
+```
+
+Then in my `Main()` method I can assign a value likie this:
+
+```
+static void Main(string[] args)
+{
+    DataDir = $@"{Program.ProgramDirectory}Data\";
+    MainMenu.Run();
+}
+```
+
+Now I can instantiate the service by calling to the new variable.
+
+```
+_playerService = new PlayerService(Program.DataDir);
+```
+
+Then I just need to change my PlayerService so it no longer requires the data path anywhere
+except the constructor. So the add method for player becomes this:
+
+```
+public Player Add(Player player)
+{
+    List<Player> players = GetAll();
+
+    //get the next player id
+    int newPlayerId = GetNextId(players);
+
+    //assign the playe an id
+    player.Player_Id = newPlayerId;
+
+    //add the player to the list
+    players.Add(player);
+
+    //save the list
+    Save(players);
+
+    //return the player with the new ID
+    return player;
+}
+```
+Finally I can change the call in my menu to match the new parameters for `Add()`.
+```
+//call the player service and add the player
+player = _playerService.Add(player);
+```
+This makes alot more sense now and the player menu doesn't know anything 
+about the file beyond the configurastion being passed in from the application.
+
+> In a more realistic example, there would probably be an application
+> configuration file which would feed this information into the program.
+> This also means that no code change would be required if the data directory
+> needed to change.
+
+
+
+
+
+
+
+
+### Problem 3 - "Happy path coding" and Brittle or Fragile code
 "Happy path coding" refers to the outcome you want your code to acheive when everything goes right.
 It is important to focus on the code's positve result but you also need to account for what happens
 when things go wrong. All input should always be validated and checked. In the immortal words of
@@ -65,7 +181,8 @@ Fox Mulder: **Trust no one**. If we look at our `Player.Add()` method you can se
 really any validation or a way to make certain properties required. The other thing that
 becomes obvious from looking at the code is that there is a pattern to collecting the information.
 
-//instantiate the new player object
+```
+//instantiate the new player object 
 Player player = new Player();
 
 Console.Write("First Name: ");
@@ -76,344 +193,147 @@ player.LastName = Console.ReadLine();
 
 Console.Write("Team: ");
 player.Team = Console.ReadLine();
+```
 
 If we were to write this as a requirement we might say something like:
 
-- Creates an object 
+- Create an object 
 - Prompt the user of input of specific data type, validate the data
 - Ignore some properties (DateAdded is an example)
 - Make some properties required
 
 Our code already does these things to an extent but it would be better to find a way to
-do this using Generics so it can be applied to all of the current and future classes.
+do this using generics so it can be applied to all of the current and future classes.
 So instead of typing all of the code above manually we'll create a method that will except
 an empty object as input and handle all of the input and validation.
-I'll create a class named `ConsoleInput` and create methods that will make it easy to 
-handle the input for any class.
+First we'll need a way to tell our program which fields are required, ignored and what prompt
+to use for the enduser. I will use custom data annotations to tell my program how to handle these.
+Data annotations can be added directly to the class file. (*To learn more about data 
+annotations see [Basic Intoduction to Data Annotations...](https://code.msdn.microsoft.com/Basic-Introduction-to-Data-244734a4)*)
+My custom data annotations will work like this:
 
+```
+[ConsolePrompt(<user prompt>, <required>, <ignored>, <minimum int>)]
+```
+Once we decorate our player class with these annotations it looks something like this:
 
+```
+public class Player
+{
 
+    [ConsolePrompt("Id",true,true)]
+    public int Player_Id { get; set; }
 
+    [ConsolePrompt("First Name",true)]
+    public string FirstName { get; set; }
 
+    [ConsolePrompt("Last Name", true)]
+    public string LastName { get; set; }
 
-Using attrributes is a way to figure out
+    [ConsolePrompt("Team", true)]
+    public string Team { get; set; }
+
+    [ConsolePrompt("Age", true, false, 1)]
+    public int Age { get; set; }
+
+    [ConsolePrompt("Date Added", true, true)]
+    public DateTime DateAdded { get; set; }
+
+}
+```
+
+Now we can read from those annotations and use them to instruct our code how
+to act. I do this with an [extension method](https://docs.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/extension-methods). 
+The extension method looks something like this:
 
 ```
 public static T GetAttributeFrom<T>(this object instance, string propertyName) where T : Attribute
 {
     var attrType = typeof(T);
     var property = instance.GetType().GetProperty(propertyName);
-    return (T)property .GetCustomAttributes(attrType, false).First();
-}
-
-var name = player.GetAttributeFrom<DisplayAttribute>("PlayerDescription").Name;
-```
-
-
-
-
-### Problem 3 - Bad SOC (Seperations of concerns)
-The whole point of having seperate projects is keeping functionally simaliar operations 
-together in the same project. For example, my services don't use `Console.Write()` 
-because that's a UI function (Well as much UI you can have in a console app anyway). 
-The UI should be completly isolated from the data. Since we're using flat files as our data,
-it seems logical that the console should control where the data is stored, but the PlayerMenu
-should be free from knowing anything at all about the data files. I noteced that in the `Add()`
-method of the menu I add a player like this:
-
-```
-//call the player service and add the player
-player = _playerService.Add(player, _playerList);
-```
-
-There really is no reason for
-
-Some of my menu code actually belongs
-
-
-
-
-
-
-I have created 3 projects in the solution.
-This will aid in the proper sepearation of 
-concerns:
-
-- TeamRoster.App
-- TeamRoster.Models
-- TeamRoster.Services
-
-App will be the actual console app that 
-an end-user would use. Models will be 
-all of the classes we want the 
-app to manage. Services will contain 
-all of the methods we use to manage our data.
-
-I am using .Net core for the main app so that once 
-finished, the app can run on multiple platofrms.
-I created the first project by right-clicking the
-solution and choosing Add->New Project
-
-![Add New Project](AddNewProject.bmp)
-
-> Note: The screen above is from Visual Studio 2017. It may look a bit different depending on your version of Visual Studio.
-
-Both the models and services projects are just class files.
-These projects become DLLs and don't have a UI or anyway 
-to interact with a user directly. I chose .Net Standard for
-these projects. .Net Standard is generally considered 
-the best choice for class libraries. I right-click the
-solution and add a new project like I did with the app.
-
-> There are some older
-applications and tasks that might not be compatible so there
-are some special cases when you may have to choose the 
-.Net Framework version of the the class library. At the time
-I'm writing this the .Net framework is only a few months
-from it's last and final update from Microsoft.
-
-![Add Models Project](AddModelsProject.bmp)
-
-I added services project the same way.
-
-Since I will be "persisting" the 
-data between application launches 
-I need a place to save our data. 
-I added a folder named "Data" to the APP project.
-
-![New Folder](new_folder.png)
-
-Next I right-clicked the new data folder and add two new 
-files (Add->New-Item) to hold the data for our classes:
-
-- Player.json
-- Team.json
-
-![Add File](add_file.bmp)
-
-The reason we add these empty files is so we can include the folder in the 
-directory with our EXE. Now we need to click on each file and change it's output options in the properties panel.
-
-![Copy If Newer](copy_if_newer.bmp)
-
-Since these are going to act as my database I am selecting the 
-"Copy if newer" option. This will now cause the Data folder to be included 
-alongside our exe when we run or publish the app.
-
-Now I'll add my classes to my models project. Again this is 
-a right-click but this time on the project 
-instead of the solution.. 
-
-![Add Player Class](AddPlayerClass.bmp)
-
-Then I repeat the process to add my team class.
-Now let's add some properties to both classes.
-I'm adding the following code for my classes.
-
-```
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Web;
-using System.ComponentModel.DataAnnotations;
-
-namespace TeamRoster.Models
-{
-    public class Player
-    {
-        public int Player_Id { get; set; }
-        public string FirstName { get; set; }
-        public string LastName { get; set; }
-        public string Team { get; set; }
-        public int Age { get; set; }
-        public DateTime DateAdded { get; set; } 
-    }
-}
-```
-```
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
-using System.Linq;
-using System.Web;
-
-namespace TeamRoster.Models
-{
-    public class Team
-    {
-        public int Team_Id { get; set; }
-        public string TeamName { get; set; }
-    }
+    return (T)property.GetCustomAttributes(attrType, false).FirstOrDefault();
 }
 ```
 
-In a typical business aplication the next step would 
-be defining the relationship between objects, 
-but I'm keeping this example very simple.
-Defining the relationships may also help us uncover
-additional properties that we need to add to our classes.
-> If you want to check out a project that includes
-some database stuff then have a 
-look at https://github.com/ericallenpaul/MVC-Demo
-
-Now I'll move on to my services. The seperation here 
-between models and services is my own personal preference.
-For me models is a generic class library that only 
-defines the ojects being used in my applications while 
-services becomes things I do *WITH* the models.
-Also Services does not have a one to one relationship
-with models. So I can have extra services that don't
-have correspondiong models. So I'm creating the matching 
-services with methods like `GetAll()`, `Add()`, `Edit()`, `Save()`, 
-`Delete()`. Since we're using JSON data I need to add 
-the nuget package that helps us deal with json data, 
-Newtonsoft's JSON.Net. In the package manger console I 
-select the service project and type: 
-`Install-Package Newtonsoft.Json`
-
-![Nuget Newtonsoft](nuget_newtonsoft.bmp)
-
-We will be using the JSON.Net library to **serialize** and 
-**deserialize** the data for the applications. Those are really
-just fancy words for converting our objects to text and back.
-Serializng our object list looks something like this:
+You'll notice this extension method uses `<T>`. This is how generics look in c#. It
+is a very common pattern, and `T` stands for any type. I could have hard coded `Player` here
+but that would mean adding this method to every class. Using generics this method will now
+work for any class. We can call this method like this:
 
 ```
-//create a list of players
-List<Player> players = new List<Player>();
-
-//turn the list of playes into a json formatted string
-string jsonData = JsonConvert.SerializeObject(players);
-
-//now we can save the string to a file
-File.WriteAllText(@"C:\data\MyPlayerData.json", text);
+var name = player.GetAttributeFrom<ConsoleAttribute>("FirstName").prompt;
+//returns "First Name"
 ```
-The "serialized" list might looks something like this:
+So now the model itself knows what the prompt needs to be for each property.
+The next thing to do is to create a class that will use this information and the
+information form the object itself to prompt an end user for every property and
+validate the input.
+I created a class named `ConsoleInput` and created methods that will make it easy to 
+handle the input for any class. Once again I use generics to help me write code that will
+work for all classes. It gets an object, figures out the properties and then loops 
+through each property. At it loops through it uses our custom data annotations to figure out 
+what the prompt should be, whether ot not it should skip the property and whether or not the 
+property is required.
 
-```
-[{
-	"Player_Id": 1,
-	"FirstName": "Luke",
-	"LastName": "Skywalker",
-	"Team": Rebels,
-	"Age": 34,
-	"DateAdded": "2019-06-18T14:52:32.9260119-04:00"
-}]
-```
+> *Note: The actual implementation of this class is less important than the fact that it
+> will make all future code much easier to write. Writing generic code is definitely a
+> more advanced coding skill and the code can be very difficult to interpret unless
+> you're familiar with generics.*
 
-To get our data back into the object list we just reverse the process:
-
-```
-//read the file
-string jsonData = File.ReadAllText(_DataFile);
-
-//deserialize the file back into a list
-List<Player> players = JsonConvert.DeserializeObject<List<Player>>(jsonData);
-```
-
-So now I have my objects (Models) and the services to create, add and delete them. Now it's
-time to work on the user interface.
-A console application has very limited options when it comes to a user interface.
-Most applications use a menu and prompts, so the next thing to do is build a menu.
-I'm going to organize my menu code by putting them all in the same folder. I created a 
-folder called `Menus`. To that folder I added 3 class files:
-
-- MainMenu.cs
-- PlayerMenu.cs
-- TeamMenu.cs
-
-Each menu class will contain a `Run()` and `DisplayMenu()` method. To display the menu is
-pretty straight forward. I just need a bunch of `Console.WriteLine()` methods
-and the text that I want to appear on screen. So the `DisplayMenu()` method for the
-main menu looks something like:
+With our new class in place my `Add()` mehtod can go from 38 lines of code to 18.
+Not only is this easier to read it's also easier to make new `Add()` methods.
+The new imporoved method looks like this:
 
 ```
-public static int DisplayMenu()
+private static void Add()
 {
-    Console.Clear();
-    Console.WriteLine();
-    Console.WriteLine("Team Roster Manager");
-    Console.WriteLine("--------------------");
-    Console.WriteLine();
-    Console.WriteLine(" 1. Manage Teams");
-    Console.WriteLine(" 2. Manage Players");
-    Console.WriteLine(" 3. Exit");
-    Console.WriteLine();
-    Console.Write("Choice: ");
-    var result = Console.ReadLine();
-    return Convert.ToInt32(result);
+    //get the existing list of players
+    _playerList = _playerService.GetAll();
+
+    //instantiate the new player object
+    Player player = new Player();
+
+    //for each property get info from the user
+    player = ConsoleInput.GetUserInput<Player>();
+    
+    //get the current date and time for DateAdded
+    player.DateAdded = DateTime.Now;
+
+    //call the player service and add the player
+    player = _playerService.Add(player);
+
+    //give the user feed back--pause for one second on screen
+    string message = $"Success: Added a new player ID: {player.Player_Id}";
+    ConsoleMessage.ShowMessage(message);
 }
 ```
-This method is also used to return the number hat the user selected.
-It has a return type of `int`.
-The `Run()` method contains the switch statement which determines 
-what happens based on the user's chosen menu item.
 
+The line:
 ```
-//create a var to hold the user's selection
-int userInput = 0;
-
-//continue to loop until a valid
-//number is chosen
-do
-{
-    //get the selection
-    userInput = DisplayMenu();
-
-    //perform an action based on a selection
-    switch (userInput)
-    {
-        case 1:
-            GetAll();
-            break;
-        case 2:
-            Add();
-            break;
-        case 3:
-            Delete();
-            break;
-        case 4:
-            MainMenu.Run();
-            break;
-        default:
-            Console.Clear();
-            Console.WriteLine();
-            Console.WriteLine(" Error: Invalid Choice");
-            System.Threading.Thread.Sleep(1000);
-            break;
-    }
-
-} while (userInput != 4);
+player = ConsoleInput.GetUserInput<Player>();
 ```
+is really the one doing all of the work.
 
-Now all that's left is to code an action for each menu item.
-You can look at the commented code in the player menu to see how each action works.
+The same technique can be used to create a generic version of `GetAll()` and
+`Delete()`. We'll set that aside for the moment and move on to the next problem.
 
+> For a real challenge see if you can create the generic version of `GetAll()` and `Delete()`.
+> What about `DisplayeMenu()` and `Run()`? Can they also be done in a generic way?
 
-### Code Challenge 1
-There seem to be some issues when entering a player's age. Make age a 
-required field and make sure it contains a value other than 0.
-
-### Code Challenge 2
-The code for the Team menu is incomplete. Finish the app 
-so team can be added like player.
+### Problem 4 - Duplicate code across classes
 
 
-### Bonus Challenge
-Think about the app, is the functionality complete? We have Add and Delete
-but shouldn't we also have Edit?
-How hard would it be to add a new function like Edit?
 
-How hard would it be to add a new class like "Coach"?
 
-What if the time the various messages are on screen needs to be longer than a second?
 
-What if the time the message is on the screen needs to wait until a user 
-is ready to move on to the next screen.
 
-Think about the UI, Is there a way to enhance the interface?
-What about colors?
+
+
+
+
+
+
+
 
 
 
