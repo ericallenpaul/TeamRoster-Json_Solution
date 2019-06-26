@@ -13,15 +13,14 @@ namespace TeamRoster.App.Menus
     public class PlayerMenu
     {
         
-        private static PlayerService _playerService;
+        private static Service<Player> _playerService;
 
         public static List<Player> _playerList { get; set; }
-
 
         public static int DisplayMenu()
         {
             //get the data directory and json file
-            _playerService = new PlayerService(Program.DataDir);
+            _playerService = new Service<Player>(Program.DataDir);
 
             //print the menu to screen
             Console.Clear();
@@ -154,7 +153,7 @@ namespace TeamRoster.App.Menus
             if (playerToRemove != null)
             {
                 //delete the player
-                _playerService.Delete(playerToRemove,_playerList);
+                _playerService.Delete(playerToRemove);
 
                 //give feedback to the user and pause for one second
                 string message = $"Player ID: {playerId} was deleted.";

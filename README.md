@@ -321,7 +321,7 @@ The same technique can be used to create a generic version of `GetAll()` and
 > What about `DisplayeMenu()` and `Run()`? Can they also be done in a generic way?
 
 ### Problem 4 - Duplicate code across classes
-
+...
 
 
 

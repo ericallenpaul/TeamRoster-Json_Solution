@@ -2,13 +2,14 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Text;
 
 namespace TeamRoster.Models
 {
     public class Player
     {
-
+        [Key]
         [ConsolePrompt("Id",true,true)]
         public int Player_Id { get; set; }
 

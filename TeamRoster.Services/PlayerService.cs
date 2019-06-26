@@ -97,8 +97,10 @@ namespace TeamRoster.Services
             return player;
         }
 
-        public List<Player> Delete(Player player, List<Player> players)
+        public List<Player> Delete(Player player)
         {
+            List<Player> players = GetAll();
+
             try
             {
                 players.Remove(player);
@@ -114,7 +116,7 @@ namespace TeamRoster.Services
             return players;
         }
 
-        private void Save(List<Player> players)
+        public void Save(List<Player> players)
         {
             try
             {
@@ -133,7 +135,7 @@ namespace TeamRoster.Services
             }
         }
 
-        private int GetNextId(List<Player> players)
+        public int GetNextId(List<Player> players)
         {
             int returnValue = 1;
 
